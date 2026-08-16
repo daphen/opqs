@@ -10,7 +10,7 @@ System.Picker {
     property var customItem: null
 
     open: Backend.open
-    placeholder: customMode ? "Exact 1Password field label…" : "Type into " + Backend.target + " — item, email, password, or OTP…"
+    placeholder: customMode ? "Exact 1Password field label…" : "Search 1Password…"
     items: customMode ? [] : Backend.suggestions
     subtitleField: "subtitle"
     filterItemsWithQuery: false
