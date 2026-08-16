@@ -24,7 +24,7 @@
         name = "opqs-client";
         runtimeInputs = [ daemon pkgs.quickshell pkgs.niri pkgs.wtype pkgs._1password-cli pkgs.procps pkgs.coreutils pkgs.util-linux ];
         text = ''
-          export QML2_IMPORT_PATH="$HOME/.local/share/qml''${QML2_IMPORT_PATH:+:$QML2_IMPORT_PATH}"
+          export QML2_IMPORT_PATH="$HOME/.config/quickshell:$HOME/.local/share/qml''${QML2_IMPORT_PATH:+:$QML2_IMPORT_PATH}"
           sock="$XDG_RUNTIME_DIR/opqs.sock"
           exec 9>"$XDG_RUNTIME_DIR/opqs-launch.lock"
           flock 9
@@ -52,7 +52,7 @@
           ${daemon}/bin/opqs summon
 
           if ! pgrep -f "quickshell.* -p ${daemon}/share/opqs/ui" >/dev/null 2>&1; then
-            setsid nohup qs -p "${daemon}/share/opqs/ui" >/dev/null 2>&1 </dev/null 9>&- &
+            setsid nohup qs -n -p "${daemon}/share/opqs/ui" >/dev/null 2>&1 </dev/null 9>&- &
           fi
         '';
       };

@@ -26,8 +26,10 @@ Singleton {
     }
 
     function refresh() {
-        if (nonce)
+        if (nonce) {
+            status = "refreshing"
             send({ type: "refresh", nonce: nonce })
+        }
     }
 
     function select(item, kind, label) {
@@ -87,11 +89,23 @@ Singleton {
         parser: SplitParser { onRead: data => backend.onEvent(data) }
         onConnectionStateChanged: {
             if (connected) {
-                backend.send({ type: "hello" })
+                hello.restart()
                 reconnect.stop()
             } else {
                 reconnect.restart()
             }
+        }
+    }
+
+    Timer {
+        id: hello
+        interval: 50
+        running: true
+        onTriggered: {
+            if (socket.connected)
+                backend.send({ type: "hello" })
+            else
+                reconnect.restart()
         }
     }
 

@@ -61,10 +61,12 @@ type activeSession struct {
 }
 
 type server struct {
-	store   metadataStore
-	mu      sync.Mutex
-	clients map[*client]struct{}
-	session *activeSession
+	store       metadataStore
+	mu          sync.Mutex
+	clients     map[*client]struct{}
+	session     *activeSession
+	metaStatus  string
+	metaMessage string
 }
 
 func socketPath() string {
@@ -100,7 +102,7 @@ func runDaemon() error {
 	if err := os.Chmod(path, 0o600); err != nil {
 		return err
 	}
-	s := &server{clients: make(map[*client]struct{})}
+	s := &server{clients: make(map[*client]struct{}), metaStatus: "loading"}
 	go s.refreshLoop()
 	for {
 		conn, err := ln.Accept()
@@ -131,9 +133,17 @@ func (s *server) refresh() {
 	err := s.store.refresh(ctx)
 	cancel()
 	if err != nil {
+		s.mu.Lock()
+		s.metaStatus = "stale"
+		s.metaMessage = "Unlock 1Password and enable CLI integration"
+		s.mu.Unlock()
 		s.broadcast(wireEvent{Type: "status", Status: "stale", Message: "Unlock 1Password and enable CLI integration"})
 		return
 	}
+	s.mu.Lock()
+	s.metaStatus = "ready"
+	s.metaMessage = ""
+	s.mu.Unlock()
 	s.broadcast(wireEvent{Type: "status", Status: "ready"})
 	s.sendCurrentResults("")
 }
@@ -199,7 +209,13 @@ func (s *server) handle(c *client, msg wireMessage) {
 }
 
 func (s *server) showEvent(session *activeSession, message string) wireEvent {
-	return wireEvent{Type: "show", Nonce: session.Nonce, Target: session.Target.Title, Status: "ready", Message: message, Suggestions: s.store.search("", 50)}
+	s.mu.Lock()
+	status, metadataMessage := s.metaStatus, s.metaMessage
+	s.mu.Unlock()
+	if message == "" {
+		message = metadataMessage
+	}
+	return wireEvent{Type: "show", Nonce: session.Nonce, Target: session.Target.Title, Status: status, Message: message, Suggestions: s.store.search("", 50)}
 }
 
 func (s *server) validNonce(nonce string) bool {
