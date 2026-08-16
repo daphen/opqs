@@ -26,21 +26,22 @@ type itemMetadata struct {
 type field struct {
 	Kind  string `json:"kind"`
 	Label string `json:"label"`
-	Alias string `json:"alias"`
+	Alias string `json:"-"`
 }
 
 type suggestion struct {
-	ItemID     string `json:"item_id"`
-	Title      string `json:"title"`
-	Username   string `json:"username,omitempty"`
-	VaultID    string `json:"vault_id"`
-	Vault      string `json:"vault"`
-	Category   string `json:"category"`
-	FieldKind  string `json:"field_kind"`
-	FieldLabel string `json:"field_label"`
-	Label      string `json:"label"`
-	Subtitle   string `json:"subtitle"`
-	Score      int    `json:"-"`
+	ItemID     string  `json:"item_id"`
+	Title      string  `json:"title"`
+	Username   string  `json:"username,omitempty"`
+	VaultID    string  `json:"vault_id"`
+	Vault      string  `json:"vault"`
+	Category   string  `json:"category"`
+	FieldKind  string  `json:"field_kind,omitempty"`
+	FieldLabel string  `json:"field_label,omitempty"`
+	Fields     []field `json:"fields,omitempty"`
+	Label      string  `json:"label"`
+	Subtitle   string  `json:"subtitle"`
+	Score      int     `json:"-"`
 }
 
 type metadataStore struct {
@@ -148,7 +149,7 @@ func safeTemplateFields(t templateItem) []field {
 		if strings.EqualFold(f.Type, "OTP") || strings.Contains(strings.ToLower(label), "one-time") {
 			kind = "otp"
 		}
-		if label == "" || seen[strings.ToLower(label)] || strings.EqualFold(f.Type, "CONCEALED") && kind == "custom" {
+		if label == "" || seen[strings.ToLower(label)] || strings.EqualFold(f.ID, "notesPlain") || strings.EqualFold(f.Type, "CONCEALED") && kind == "custom" {
 			continue
 		}
 		seen[strings.ToLower(label)] = true
@@ -202,27 +203,13 @@ func (s *metadataStore) search(query string, limit int) []suggestion {
 				hosts = append(hosts, u.Hostname())
 			}
 		}
-		base := strings.Join([]string{it.Title, it.Username, it.Vault, it.Category, strings.Join(hosts, " ")}, " ")
-		if len(it.Fields) == 0 {
-			score, ok := fuzzyScore(q, strings.ToLower(base))
-			if ok {
-				out = append(out, suggestion{ItemID: it.ID, Title: it.Title, Username: it.Username, VaultID: it.VaultID, Vault: it.Vault, Category: it.Category, Label: it.Title, Subtitle: it.Username, Score: score})
-			}
-		}
+		searchParts := []string{it.Title, it.Username, it.Vault, it.Category, strings.Join(hosts, " ")}
 		for _, f := range it.Fields {
-			hay := strings.ToLower(base + " " + f.Alias)
-			score, ok := fuzzyScore(q, hay)
-			if !ok {
-				continue
-			}
-			display := f.Label
-			if f.Kind == "username" {
-				display = "username/email"
-			}
-			if f.Kind == "otp" {
-				display = "one-time password"
-			}
-			out = append(out, suggestion{ItemID: it.ID, Title: it.Title, Username: it.Username, VaultID: it.VaultID, Vault: it.Vault, Category: it.Category, FieldKind: f.Kind, FieldLabel: f.Label, Label: it.Title + " · " + display, Subtitle: subtitle(it), Score: score})
+			searchParts = append(searchParts, f.Alias)
+		}
+		score, ok := fuzzyScore(q, strings.ToLower(strings.Join(searchParts, " ")))
+		if ok {
+			out = append(out, suggestion{ItemID: it.ID, Title: it.Title, Username: it.Username, VaultID: it.VaultID, Vault: it.Vault, Category: it.Category, Fields: it.Fields, Label: it.Title, Subtitle: subtitle(it), Score: score})
 		}
 	}
 	sort.SliceStable(out, func(i, j int) bool {

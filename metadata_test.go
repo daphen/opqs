@@ -17,21 +17,21 @@ func TestSafeTemplateFieldsDropsUnlabelledConcealedFields(t *testing.T) {
 	}
 }
 
-func TestSearchSuggestsItemAndFieldWithoutValues(t *testing.T) {
+func TestSearchSuggestsOneItemWithFieldsWithoutValues(t *testing.T) {
 	s := metadataStore{items: []itemMetadata{{
 		ID: "item", Title: "GitHub", Username: "me@example.test", VaultID: "vault", Vault: "Personal", Category: "LOGIN",
 		Fields: ensureCommonFields(nil, "LOGIN"),
 	}}}
 	got := s.search("github email", 10)
-	if len(got) == 0 || got[0].FieldKind != "username" {
-		t.Fatalf("expected username suggestion: %#v", got)
+	if len(got) != 1 || got[0].Label != "GitHub" || len(got[0].Fields) != 3 {
+		t.Fatalf("expected one item with its fields: %#v", got)
 	}
 	raw, err := json.Marshal(got)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(raw), "value") || strings.Contains(string(raw), "secret") {
-		t.Fatalf("secret-capable field leaked into protocol: %s", raw)
+	if strings.Contains(string(raw), "value") || strings.Contains(string(raw), "secret") || strings.Contains(string(raw), "alias") {
+		t.Fatalf("secret-capable or internal field leaked into protocol: %s", raw)
 	}
 }
 
