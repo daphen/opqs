@@ -51,7 +51,7 @@
 
           ui_path="${daemon}/share/opqs/ui"
           current_ui=""
-          for pid in $(pgrep -f 'quickshell.* -p .*/opqs-[^/]*/share/opqs/ui' 2>/dev/null || true); do
+          for pid in $(pgrep -f 'quickshell.* -p .*-opqs-[^/]*/share/opqs/ui' 2>/dev/null || true); do
             cmd=$(tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null || true)
             if [[ "$cmd" == *" -p $ui_path"* ]] && [ -z "$current_ui" ]; then
               current_ui=$pid
