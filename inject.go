@@ -55,7 +55,7 @@ func (b *cappedBuffer) Zero() {
 }
 
 func safeCommandEnv() []string {
-	keep := map[string]bool{"HOME": true, "PATH": true, "XDG_RUNTIME_DIR": true, "XDG_CONFIG_HOME": true, "WAYLAND_DISPLAY": true, "DBUS_SESSION_BUS_ADDRESS": true, "LANG": true, "LC_ALL": true}
+	keep := map[string]bool{"HOME": true, "PATH": true, "XDG_RUNTIME_DIR": true, "XDG_CONFIG_HOME": true, "WAYLAND_DISPLAY": true, "NIRI_SOCKET": true, "DBUS_SESSION_BUS_ADDRESS": true, "LANG": true, "LC_ALL": true}
 	out := []string{"OP_DEBUG=false", "OP_CACHE=false", "NO_COLOR=1"}
 	for _, entry := range os.Environ() {
 		key, _, ok := strings.Cut(entry, "=")
