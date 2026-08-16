@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"os/exec"
 	"strconv"
@@ -158,20 +159,15 @@ func focusAndValidate(ctx context.Context, target windowInfo) error {
 }
 
 func retrieveField(ctx context.Context, itemID, vaultID string, req fieldRequest) (*cappedBuffer, error) {
-	if itemID == "" || vaultID == "" {
-		return nil, errors.New("invalid item")
+	label := strings.TrimSpace(req.Label)
+	if itemID == "" || vaultID == "" || label == "" {
+		return nil, errors.New("invalid item or field")
 	}
-	args := []string{"item", "get", itemID, "--vault", vaultID, "--cache=false"}
+	reference := "op://" + url.PathEscape(vaultID) + "/" + url.PathEscape(itemID) + "/" + url.PathEscape(label)
 	if req.Kind == "otp" {
-		args = append(args, "--otp")
-	} else {
-		label := strings.TrimSpace(req.Label)
-		if label == "" {
-			return nil, errors.New("field label is required")
-		}
-		args = append(args, "--fields", "label="+label, "--reveal", "--format", "json")
+		reference += "?attribute=otp"
 	}
-	cmd := exec.CommandContext(ctx, "op", args...)
+	cmd := exec.CommandContext(ctx, "op", "read", "--no-newline", "--cache=false", reference)
 	cmd.Env = safeCommandEnv()
 	buf := &cappedBuffer{Max: maxSecretBytes}
 	cmd.Stdout = buf
@@ -179,37 +175,11 @@ func retrieveField(ctx context.Context, itemID, vaultID string, req fieldRequest
 		buf.Zero()
 		return nil, errors.New("field could not be retrieved; unlock 1Password and try again")
 	}
-	if req.Kind != "otp" {
-		value, err := parseFieldValue(buf.Bytes())
-		buf.Zero()
-		if err != nil {
-			return nil, err
-		}
-		buf.Data = value
-	} else {
-		buf.Data = bytes.TrimSuffix(buf.Data, []byte("\n"))
-	}
 	if len(buf.Data) == 0 {
 		buf.Zero()
 		return nil, errors.New("selected field is empty")
 	}
 	return buf, nil
-}
-
-func parseFieldValue(raw []byte) ([]byte, error) {
-	var one struct {
-		Value string `json:"value"`
-	}
-	if json.Unmarshal(raw, &one) == nil && one.Value != "" {
-		return []byte(one.Value), nil
-	}
-	var many []struct {
-		Value string `json:"value"`
-	}
-	if json.Unmarshal(raw, &many) == nil && len(many) == 1 && many[0].Value != "" {
-		return []byte(many[0].Value), nil
-	}
-	return nil, errors.New("selected field was ambiguous or empty")
 }
 
 func typeSecret(ctx context.Context, secret []byte) error {

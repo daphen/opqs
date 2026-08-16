@@ -49,6 +49,9 @@ Singleton {
             send({ type: "cancel", nonce: nonce })
         open = false
         nonce = ""
+        suggestions = []
+        target = ""
+        message = ""
     }
 
     function onEvent(line) {
@@ -69,9 +72,14 @@ Singleton {
             message = event.message || ""
         } else if (event.type === "hide" && event.nonce === nonce) {
             open = false
+            suggestions = []
+            target = ""
             hiddenAck.restart()
         } else if (event.type === "done") {
             nonce = ""
+            suggestions = []
+            target = ""
+            message = ""
             open = false
         }
     }

@@ -28,13 +28,25 @@ func withPath(t *testing.T, dir string) {
 	t.Cleanup(func() { _ = os.Setenv("PATH", old) })
 }
 
-func TestParseFieldValueRequiresExactlyOneValue(t *testing.T) {
-	got, err := parseFieldValue([]byte(`{"id":"password","value":"sentinel"}`))
-	if err != nil || string(got) != "sentinel" {
-		t.Fatalf("got %q, %v", got, err)
+func TestRetrieveFieldKeepsSecretOutOfArguments(t *testing.T) {
+	dir := t.TempDir()
+	argsFile := filepath.Join(dir, "args")
+	writeExecutable(t, dir, "op", fmt.Sprintf("printf '%%s\\n' \"$@\" >'%s'\nprintf 'sentinel'\n", argsFile))
+	withPath(t, dir)
+	buf, err := retrieveField(context.Background(), "item-id", "vault-id", fieldRequest{Kind: "password", Label: "password"})
+	if err != nil {
+		t.Fatal(err)
 	}
-	if _, err := parseFieldValue([]byte(`[{"value":"one"},{"value":"two"}]`)); err == nil {
-		t.Fatal("accepted ambiguous fields")
+	defer buf.Zero()
+	if string(buf.Bytes()) != "sentinel" {
+		t.Fatalf("got %q", buf.Bytes())
+	}
+	args, _ := os.ReadFile(argsFile)
+	if bytes.Contains(args, buf.Bytes()) {
+		t.Fatal("secret appeared in op arguments")
+	}
+	if !bytes.Contains(args, []byte("op://vault-id/item-id/password")) {
+		t.Fatalf("missing narrow reference: %s", args)
 	}
 }
 
