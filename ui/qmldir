@@ -1,0 +1,3 @@
+module Opqs
+singleton Backend 1.0 Backend.qml
+CredentialPicker 1.0 CredentialPicker.qml
