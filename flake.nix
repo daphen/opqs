@@ -49,10 +49,21 @@
           for _ in $(seq 1 50); do [ -S "$sock" ] && break; sleep 0.1; done
           [ -S "$sock" ] || exit 1
 
+          ui_path="${daemon}/share/opqs/ui"
+          current_ui=""
+          for pid in $(pgrep -f 'quickshell.* -p .*/opqs-[^/]*/share/opqs/ui' 2>/dev/null || true); do
+            cmd=$(tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null || true)
+            if [[ "$cmd" == *" -p $ui_path"* ]] && [ -z "$current_ui" ]; then
+              current_ui=$pid
+            else
+              kill "$pid" 2>/dev/null || true
+            fi
+          done
+
           ${daemon}/bin/opqs summon
 
-          if ! pgrep -f "quickshell.* -p ${daemon}/share/opqs/ui" >/dev/null 2>&1; then
-            setsid nohup qs -n -p "${daemon}/share/opqs/ui" >/dev/null 2>&1 </dev/null 9>&- &
+          if [ -z "$current_ui" ]; then
+            setsid nohup qs -n -p "$ui_path" >/dev/null 2>&1 </dev/null 9>&- &
           fi
         '';
       };
