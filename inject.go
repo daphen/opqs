@@ -15,10 +15,7 @@ import (
 	"time"
 )
 
-const (
-	maxSecretBytes = 64 << 10
-	typeDelayMS    = 5
-)
+const maxSecretBytes = 64 << 10
 
 type windowInfo struct {
 	ID          uint64 `json:"id"`
@@ -185,21 +182,44 @@ func retrieveField(ctx context.Context, itemID, vaultID string, req fieldRequest
 	return buf, nil
 }
 
-func typeSecret(ctx context.Context, secret []byte) error {
-	cmd := exec.CommandContext(ctx, "wtype", "-d", strconv.Itoa(typeDelayMS), "-")
-	cmd.Env = safeCommandEnv()
-	stdin, err := cmd.StdinPipe()
+func pasteSecret(ctx context.Context, secret []byte) error {
+	copyCmd := exec.CommandContext(ctx, "wl-copy", "--foreground", "--sensitive", "--type", "text/plain;charset=utf-8")
+	copyCmd.Env = safeCommandEnv()
+	stdin, err := copyCmd.StdinPipe()
 	if err != nil {
-		return errors.New("typing unavailable")
+		return errors.New("paste unavailable")
 	}
-	if err := cmd.Start(); err != nil {
-		return errors.New("typing unavailable")
+	if err := copyCmd.Start(); err != nil {
+		return errors.New("paste unavailable")
 	}
+	defer func() {
+		_ = copyCmd.Process.Kill()
+		_ = copyCmd.Wait()
+		clearCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		clear := exec.CommandContext(clearCtx, "wl-copy", "--clear")
+		clear.Env = safeCommandEnv()
+		_ = clear.Run()
+	}()
 	_, writeErr := io.Copy(stdin, bytes.NewReader(secret))
 	closeErr := stdin.Close()
-	waitErr := cmd.Wait()
-	if writeErr != nil || closeErr != nil || waitErr != nil {
-		return errors.New("typing failed")
+	if writeErr != nil || closeErr != nil {
+		return errors.New("paste unavailable")
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(30 * time.Millisecond):
+	}
+	paste := exec.CommandContext(ctx, "wtype", "-M", "ctrl", "-k", "v", "-m", "ctrl")
+	paste.Env = safeCommandEnv()
+	if err := paste.Run(); err != nil {
+		return errors.New("paste failed")
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(100 * time.Millisecond):
 	}
 	return nil
 }
@@ -217,7 +237,7 @@ func inject(ctx context.Context, target windowInfo, itemID, vaultID string, req 
 	if err != nil || !focused.IsFocused || !sameWindow(target, focused) {
 		return errors.New("focus changed before typing; nothing was typed")
 	}
-	if err := typeSecret(ctx, secret.Bytes()); err != nil {
+	if err := pasteSecret(ctx, secret.Bytes()); err != nil {
 		return err
 	}
 	focused, err = queryFocusedWindow(ctx)

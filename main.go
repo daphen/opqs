@@ -53,11 +53,12 @@ type selection struct {
 }
 
 type activeSession struct {
-	Nonce     string
-	Target    windowInfo
-	Expires   time.Time
-	Pending   *selection
-	Injecting bool
+	Nonce      string
+	Target     windowInfo
+	ActiveHost string
+	Expires    time.Time
+	Pending    *selection
+	Injecting  bool
 }
 
 type server struct {
@@ -179,17 +180,24 @@ func (s *server) handle(c *client, msg wireMessage) {
 			c.send(wireEvent{Type: "ack", Status: "error", Message: "No safe input target is focused"})
 			return
 		}
-		session := &activeSession{Nonce: randomNonce(), Target: target, Expires: time.Now().Add(60 * time.Second)}
+		browserCtx, browserCancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+		activeHost := activeBrowserHost(browserCtx, target)
+		browserCancel()
+		session := &activeSession{Nonce: randomNonce(), Target: target, ActiveHost: activeHost, Expires: time.Now().Add(60 * time.Second)}
 		s.mu.Lock()
 		s.session = session
 		s.mu.Unlock()
 		c.send(wireEvent{Type: "ack", Status: "ready"})
 		s.broadcastUI(s.showEvent(session, ""))
 	case "search":
-		if !s.validNonce(msg.Nonce) {
+		s.mu.Lock()
+		if s.session == nil || s.session.Nonce != msg.Nonce || time.Now().After(s.session.Expires) {
+			s.mu.Unlock()
 			return
 		}
-		c.send(wireEvent{Type: "results", Nonce: msg.Nonce, Suggestions: s.store.search(msg.Query, 50)})
+		activeHost := s.session.ActiveHost
+		s.mu.Unlock()
+		c.send(wireEvent{Type: "results", Nonce: msg.Nonce, Suggestions: s.store.search(msg.Query, activeHost, 50)})
 	case "refresh":
 		if !s.validNonce(msg.Nonce) {
 			return
@@ -215,7 +223,7 @@ func (s *server) showEvent(session *activeSession, message string) wireEvent {
 	if message == "" {
 		message = metadataMessage
 	}
-	return wireEvent{Type: "show", Nonce: session.Nonce, Target: session.Target.Title, Status: status, Message: message, Suggestions: s.store.search("", 50)}
+	return wireEvent{Type: "show", Nonce: session.Nonce, Target: session.Target.Title, Status: status, Message: message, Suggestions: s.store.search("", session.ActiveHost, 50)}
 }
 
 func (s *server) validNonce(nonce string) bool {
@@ -294,7 +302,7 @@ func (s *server) beginInjection(nonce string) {
 		}
 		s.mu.Unlock()
 		if err != nil {
-			retry := &activeSession{Nonce: randomNonce(), Target: session.Target, Expires: time.Now().Add(60 * time.Second)}
+			retry := &activeSession{Nonce: randomNonce(), Target: session.Target, ActiveHost: session.ActiveHost, Expires: time.Now().Add(60 * time.Second)}
 			s.mu.Lock()
 			s.session = retry
 			s.mu.Unlock()
@@ -310,7 +318,7 @@ func (s *server) sendCurrentResults(query string) {
 	session := s.session
 	s.mu.Unlock()
 	if session != nil {
-		s.broadcastUI(wireEvent{Type: "results", Nonce: session.Nonce, Suggestions: s.store.search(query, 50)})
+		s.broadcastUI(wireEvent{Type: "results", Nonce: session.Nonce, Suggestions: s.store.search(query, session.ActiveHost, 50)})
 	}
 }
 

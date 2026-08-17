@@ -190,7 +190,7 @@ func aliases(kind, label string) string {
 	}
 }
 
-func (s *metadataStore) search(query string, limit int) []suggestion {
+func (s *metadataStore) search(query, activeHost string, limit int) []suggestion {
 	s.mu.RLock()
 	items := append([]itemMetadata(nil), s.items...)
 	s.mu.RUnlock()
@@ -209,6 +209,12 @@ func (s *metadataStore) search(query string, limit int) []suggestion {
 		}
 		score, ok := fuzzyScore(q, strings.ToLower(strings.Join(searchParts, " ")))
 		if ok {
+			for _, host := range hosts {
+				if sameSiteHost(host, activeHost) {
+					score += 1000
+					break
+				}
+			}
 			out = append(out, suggestion{ItemID: it.ID, Title: it.Title, Username: it.Username, VaultID: it.VaultID, Vault: it.Vault, Category: it.Category, Fields: it.Fields, Label: it.Title, Subtitle: subtitle(it), Score: score})
 		}
 	}
@@ -222,6 +228,15 @@ func (s *metadataStore) search(query string, limit int) []suggestion {
 		out = out[:limit]
 	}
 	return out
+}
+
+func sameSiteHost(itemHost, activeHost string) bool {
+	itemHost = strings.ToLower(strings.TrimSuffix(itemHost, "."))
+	activeHost = strings.ToLower(strings.TrimSuffix(activeHost, "."))
+	if itemHost == "" || activeHost == "" {
+		return false
+	}
+	return itemHost == activeHost || strings.HasSuffix(itemHost, "."+activeHost) || strings.HasSuffix(activeHost, "."+itemHost)
 }
 
 func subtitle(it itemMetadata) string {

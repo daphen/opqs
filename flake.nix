@@ -22,7 +22,7 @@
 
       client = pkgs.writeShellApplication {
         name = "opqs-client";
-        runtimeInputs = [ daemon pkgs.quickshell pkgs.niri pkgs.wtype pkgs.procps pkgs.coreutils pkgs.util-linux ];
+        runtimeInputs = [ daemon pkgs.quickshell pkgs.niri pkgs.wtype pkgs.wl-clipboard pkgs.procps pkgs.coreutils pkgs.util-linux ];
         text = ''
           export PATH="/run/wrappers/bin:$PATH"
           export QML2_IMPORT_PATH="$HOME/.config/quickshell:$HOME/.local/share/qml''${QML2_IMPORT_PATH:+:$QML2_IMPORT_PATH}"

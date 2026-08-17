@@ -60,29 +60,42 @@ func TestCappedBufferZeroesSecret(t *testing.T) {
 	}
 }
 
-func TestTypeSecretUsesStdinNotArgvOrEnvironment(t *testing.T) {
+func TestPasteSecretUsesSensitiveClipboardWithoutProcessLeak(t *testing.T) {
 	dir := t.TempDir()
-	writeExecutable(t, dir, "wtype", fmt.Sprintf(`
-tr '\000' '\n' </proc/$$/cmdline >'%s/cmdline'
-tr '\000' '\n' </proc/$$/environ >'%s/environ'
-cat >'%s/stdin'
-`, dir, dir, dir))
+	writeExecutable(t, dir, "wl-copy", fmt.Sprintf(`
+if [ "$1" = "--clear" ]; then
+  : >'%s/cleared'
+  exit 0
+fi
+tr '\000' '\n' </proc/$$/cmdline >'%s/copy-cmdline'
+tr '\000' '\n' </proc/$$/environ >'%s/copy-environ'
+cat >'%s/copied'
+exec sleep 10
+`, dir, dir, dir, dir))
+	writeExecutable(t, dir, "wtype", fmt.Sprintf("printf '%%s\\n' \"$@\" >'%s/wtype-args'\n", dir))
 	withPath(t, dir)
 	secret := []byte("PROC_LEAK_SENTINEL_93f2")
-	if err := typeSecret(context.Background(), secret); err != nil {
+	if err := pasteSecret(context.Background(), secret); err != nil {
 		t.Fatal(err)
 	}
-	stdin, _ := os.ReadFile(filepath.Join(dir, "stdin"))
-	cmdline, _ := os.ReadFile(filepath.Join(dir, "cmdline"))
-	environ, _ := os.ReadFile(filepath.Join(dir, "environ"))
-	if !bytes.Equal(stdin, secret) {
-		t.Fatalf("stdin got %q", stdin)
+	copied, _ := os.ReadFile(filepath.Join(dir, "copied"))
+	cmdline, _ := os.ReadFile(filepath.Join(dir, "copy-cmdline"))
+	environ, _ := os.ReadFile(filepath.Join(dir, "copy-environ"))
+	wtypeArgs, _ := os.ReadFile(filepath.Join(dir, "wtype-args"))
+	if !bytes.Equal(copied, secret) {
+		t.Fatalf("clipboard stdin got %q", copied)
 	}
-	if bytes.Contains(cmdline, secret) || bytes.Contains(environ, secret) {
+	if bytes.Contains(cmdline, secret) || bytes.Contains(environ, secret) || bytes.Contains(wtypeArgs, secret) {
 		t.Fatal("secret appeared in /proc argv or environment")
 	}
-	if !bytes.Contains(cmdline, []byte("-d\n5\n-")) {
-		t.Fatalf("wtype delay or stdin argument missing: %q", cmdline)
+	if !bytes.Contains(cmdline, []byte("--sensitive")) {
+		t.Fatalf("sensitive clipboard hint missing: %q", cmdline)
+	}
+	if string(wtypeArgs) != "-M\nctrl\n-k\nv\n-m\nctrl\n" {
+		t.Fatalf("unexpected paste chord: %q", wtypeArgs)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "cleared")); err != nil {
+		t.Fatal("clipboard was not cleared")
 	}
 }
 
