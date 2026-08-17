@@ -15,7 +15,10 @@ import (
 	"time"
 )
 
-const maxSecretBytes = 64 << 10
+const (
+	maxSecretBytes = 64 << 10
+	typeDelayMS    = 5
+)
 
 type windowInfo struct {
 	ID          uint64 `json:"id"`
@@ -183,7 +186,7 @@ func retrieveField(ctx context.Context, itemID, vaultID string, req fieldRequest
 }
 
 func typeSecret(ctx context.Context, secret []byte) error {
-	cmd := exec.CommandContext(ctx, "wtype", "-")
+	cmd := exec.CommandContext(ctx, "wtype", "-d", strconv.Itoa(typeDelayMS), "-")
 	cmd.Env = safeCommandEnv()
 	stdin, err := cmd.StdinPipe()
 	if err != nil {

@@ -81,6 +81,9 @@ cat >'%s/stdin'
 	if bytes.Contains(cmdline, secret) || bytes.Contains(environ, secret) {
 		t.Fatal("secret appeared in /proc argv or environment")
 	}
+	if !bytes.Contains(cmdline, []byte("-d\n5\n-")) {
+		t.Fatalf("wtype delay or stdin argument missing: %q", cmdline)
+	}
 }
 
 func TestFocusValidationRejectsChangedWindow(t *testing.T) {
