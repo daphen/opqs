@@ -104,7 +104,6 @@ func runDaemon() error {
 		return err
 	}
 	s := &server{clients: make(map[*client]struct{}), metaStatus: "loading"}
-	go s.refreshLoop()
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
@@ -119,15 +118,6 @@ func runDaemon() error {
 }
 
 var syscallUmask = syscall.Umask
-
-func (s *server) refreshLoop() {
-	s.refresh()
-	t := time.NewTicker(10 * time.Minute)
-	defer t.Stop()
-	for range t.C {
-		s.refresh()
-	}
-}
 
 func (s *server) refresh() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -189,6 +179,7 @@ func (s *server) handle(c *client, msg wireMessage) {
 		s.mu.Unlock()
 		c.send(wireEvent{Type: "ack", Status: "ready"})
 		s.broadcastUI(s.showEvent(session, ""))
+		go s.refresh()
 	case "search":
 		s.mu.Lock()
 		if s.session == nil || s.session.Nonce != msg.Nonce || time.Now().After(s.session.Expires) {
